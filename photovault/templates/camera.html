@@ -561,6 +561,119 @@
         .hidden {
             display: none !important;
         }
+
+        /* Quad Split Overlay Styles */
+        .quad-split-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 50;
+            pointer-events: none;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 2px;
+        }
+
+        .quad-section {
+            border: 2px solid rgba(255, 255, 255, 0.6);
+            background: rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-start;
+            position: relative;
+            backdrop-filter: blur(1px);
+        }
+
+        .quad-section:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.8);
+        }
+
+        .quad-top-left {
+            border-top-left-radius: 0;
+        }
+
+        .quad-top-right {
+            border-top-right-radius: 0;
+        }
+
+        .quad-bottom-left {
+            border-bottom-left-radius: 0;
+        }
+
+        .quad-bottom-right {
+            border-bottom-right-radius: 0;
+        }
+
+        .quad-label {
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 6px 12px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 0 0 8px 0;
+            position: absolute;
+            top: 0;
+            left: 0;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .quad-top-right .quad-label {
+            border-radius: 0 0 0 8px;
+            right: 0;
+            left: auto;
+        }
+
+        .quad-bottom-left .quad-label {
+            border-radius: 0 8px 0 0;
+            bottom: 0;
+            top: auto;
+        }
+
+        .quad-bottom-right .quad-label {
+            border-radius: 8px 0 0 0;
+            bottom: 0;
+            top: auto;
+            right: 0;
+            left: auto;
+        }
+
+        /* Mode Selector Styles */
+        .mode-selector {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 25px;
+            padding: 4px 8px;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            min-width: 120px;
+            justify-content: center;
+        }
+
+        .mode-selector:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: scale(1.05);
+        }
+
+        .mode-selector.quad-mode {
+            background: rgba(34, 139, 34, 0.8);
+            border-color: rgba(34, 139, 34, 1);
+        }
+
+        .mode-selector.quad-mode:hover {
+            background: rgba(34, 139, 34, 1);
+        }
     </style>
 </head>
 <body>
@@ -604,6 +717,22 @@
         <div class="camera-viewport">
             <video id="cameraVideo" autoplay playsinline muted></video>
             
+            <!-- Quad Split Overlay -->
+            <div class="quad-split-overlay hidden" id="quadSplitOverlay">
+                <div class="quad-section quad-top-left">
+                    <div class="quad-label">Top Left</div>
+                </div>
+                <div class="quad-section quad-top-right">
+                    <div class="quad-label">Top Right</div>
+                </div>
+                <div class="quad-section quad-bottom-left">
+                    <div class="quad-label">Bottom Left</div>
+                </div>
+                <div class="quad-section quad-bottom-right">
+                    <div class="quad-label">Bottom Right</div>
+                </div>
+            </div>
+            
             <!-- Zoom Controls -->
             <div class="zoom-controls" id="zoomControls">
                 <button class="zoom-btn" id="zoomInBtn">+</button>
@@ -616,6 +745,9 @@
         <div class="top-controls">
             <button class="control-button multi-photo-button" id="multiPhotoButton" title="Toggle Multi-Photo Mode">
                 <span id="multiPhotoIcon">📷</span> <span id="multiPhotoText">Single</span>
+            </button>
+            <button class="mode-selector" id="modeSelector" title="Toggle between Sequential and Quad Split modes">
+                <span id="modeIcon">📷</span> <span id="modeText">Sequential</span>
             </button>
             <button class="control-button exit-button" id="exitButton">
                 <span>✕</span> Exit
@@ -778,6 +910,13 @@
                 this.burstPhotosRemaining = 0;
                 this.burstPhotoCount = 4; // Number of photos to capture in burst mode
                 
+                // Quad split mode properties
+                this.captureMode = 'sequential'; // 'sequential' or 'quad-split'
+                this.quadSplitOverlay = null;
+                
+                // Initialize mode selector as hidden
+                this.initializeModeSelector();
+                
                 this.setupElements();
                 this.setupEventListeners();
                 this.enforceOrientation();
@@ -800,11 +939,17 @@
                 this.exitButton = document.getElementById('exitButton');
                 this.flashButton = document.getElementById('flashButton');
                 this.multiPhotoButton = document.getElementById('multiPhotoButton');
+                this.modeSelector = document.getElementById('modeSelector');
                 this.requestPermissionBtn = document.getElementById('requestPermissionBtn');
                 
                 // Multi-photo elements
                 this.multiPhotoProgress = document.getElementById('multiPhotoProgress');
                 this.snapText = document.getElementById('snapText');
+                
+                // Quad split elements
+                this.quadSplitOverlay = document.getElementById('quadSplitOverlay');
+                this.modeIcon = document.getElementById('modeIcon');
+                this.modeText = document.getElementById('modeText');
             }
 
             setupEventListeners() {
@@ -814,9 +959,15 @@
                     if (!captureInProgress) {
                         captureInProgress = true;
                         if (this.multiPhotoMode && !this.isBurstCapture) {
-                            this.startBurstCapture().finally(() => {
-                                setTimeout(() => { captureInProgress = false; }, 500);
-                            });
+                            if (this.captureMode === 'quad-split') {
+                                this.captureQuadSplit().finally(() => {
+                                    setTimeout(() => { captureInProgress = false; }, 500);
+                                });
+                            } else {
+                                this.startBurstCapture().finally(() => {
+                                    setTimeout(() => { captureInProgress = false; }, 500);
+                                });
+                            }
                         } else {
                             this.capturePhoto().finally(() => {
                                 setTimeout(() => { captureInProgress = false; }, 500);
@@ -836,6 +987,7 @@
                 this.exitButton.addEventListener('click', () => this.exitCamera());
                 this.flashButton.addEventListener('click', () => this.toggleFlash());
                 this.multiPhotoButton.addEventListener('click', () => this.toggleMultiPhotoMode());
+                this.modeSelector.addEventListener('click', () => this.toggleCaptureMode());
                 this.requestPermissionBtn.addEventListener('click', () => this.requestCameraAccess());
                 
                 // Photo preview
@@ -1016,18 +1168,255 @@
                 this.multiPhotoMode = !this.multiPhotoMode;
                 this.multiPhotoButton.classList.toggle('active', this.multiPhotoMode);
                 
-                // Update button appearance
+                // Update button appearance based on mode
                 if (this.multiPhotoMode) {
                     document.getElementById('multiPhotoIcon').textContent = '📷📷📷📷';
                     document.getElementById('multiPhotoText').textContent = 'Multi (x4)';
-                    this.snapText.textContent = '🚀 START MULTI (4x)';
+                    if (this.captureMode === 'quad-split') {
+                        this.snapText.textContent = '📱 QUAD SPLIT (4x)';
+                    } else {
+                        this.snapText.textContent = '🚀 START MULTI (4x)';
+                    }
+                    // Show mode selector when multi-photo is enabled
+                    this.modeSelector.style.display = 'flex';
+                    // Show/hide quad overlay based on current mode
+                    this.updateQuadOverlay();
                 } else {
                     document.getElementById('multiPhotoIcon').textContent = '📷';
                     document.getElementById('multiPhotoText').textContent = 'Single';
                     this.snapText.textContent = '📷 SNAP';
+                    // Hide mode selector when multi-photo is disabled
+                    this.modeSelector.style.display = 'none';
+                    // Hide quad overlay
+                    this.quadSplitOverlay.classList.add('hidden');
                 }
                 
                 console.log(`Multi-photo mode: ${this.multiPhotoMode ? 'ON' : 'OFF'}`);
+            }
+
+            toggleCaptureMode() {
+                // Switch between sequential and quad-split modes
+                this.captureMode = this.captureMode === 'sequential' ? 'quad-split' : 'sequential';
+                
+                // Update mode selector appearance
+                if (this.captureMode === 'quad-split') {
+                    this.modeSelector.classList.add('quad-mode');
+                    this.modeIcon.textContent = '📱';
+                    this.modeText.textContent = 'Quad Split';
+                    if (this.multiPhotoMode) {
+                        this.snapText.textContent = '📱 QUAD SPLIT (4x)';
+                    }
+                } else {
+                    this.modeSelector.classList.remove('quad-mode');
+                    this.modeIcon.textContent = '📷';
+                    this.modeText.textContent = 'Sequential';
+                    if (this.multiPhotoMode) {
+                        this.snapText.textContent = '🚀 START MULTI (4x)';
+                    }
+                }
+                
+                // Update quad overlay visibility
+                this.updateQuadOverlay();
+                
+                console.log(`Capture mode: ${this.captureMode}`);
+            }
+
+            updateQuadOverlay() {
+                // Show quad overlay only when multi-photo mode is on and quad-split is selected
+                if (this.multiPhotoMode && this.captureMode === 'quad-split') {
+                    this.quadSplitOverlay.classList.remove('hidden');
+                } else {
+                    this.quadSplitOverlay.classList.add('hidden');
+                }
+            }
+
+            async captureQuadSplit() {
+                if (!this.multiPhotoMode || this.captureMode !== 'quad-split') return;
+                
+                console.log('📱 Starting quad-split capture...');
+                
+                // Show progress indicator
+                this.multiPhotoProgress.classList.remove('hidden');
+                const progressText = this.multiPhotoProgress.querySelector('.progress-text');
+                progressText.textContent = 'Capturing Quad Split...';
+                progressText.style.color = '#4ade80';
+                
+                // Disable controls during capture
+                this.disableControlsDuringCapture(true);
+                
+                try {
+                    // Visual feedback
+                    this.triggerFlash();
+                    this.playCaptureSound();
+                    
+                    // Ensure we have valid video dimensions
+                    if (this.video.videoWidth === 0 || this.video.videoHeight === 0) {
+                        throw new Error('Video not ready for capture');
+                    }
+                    
+                    // Set canvas to match video dimensions
+                    this.canvas.width = this.video.videoWidth;
+                    this.canvas.height = this.video.videoHeight;
+                    
+                    console.log(`📐 Capturing at resolution: ${this.canvas.width}x${this.canvas.height}`);
+                    
+                    // Draw the full video frame to canvas
+                    this.ctx.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height);
+                    
+                    // Calculate quadrant dimensions
+                    const quadWidth = Math.floor(this.canvas.width / 2);
+                    const quadHeight = Math.floor(this.canvas.height / 2);
+                    
+                    // Define quadrant positions and names
+                    const quadrants = [
+                        { name: 'top-left', x: 0, y: 0 },
+                        { name: 'top-right', x: quadWidth, y: 0 },
+                        { name: 'bottom-left', x: 0, y: quadHeight },
+                        { name: 'bottom-right', x: quadWidth, y: quadHeight }
+                    ];
+                    
+                    const uploadPromises = [];
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+                    
+                    // Create and upload each quadrant
+                    for (const [index, quad] of quadrants.entries()) {
+                        // Create a separate canvas for each quadrant
+                        const quadCanvas = document.createElement('canvas');
+                        quadCanvas.width = quadWidth;
+                        quadCanvas.height = quadHeight;
+                        const quadCtx = quadCanvas.getContext('2d');
+                        
+                        // Draw the quadrant from the main canvas
+                        quadCtx.drawImage(
+                            this.canvas,
+                            quad.x, quad.y, quadWidth, quadHeight,
+                            0, 0, quadWidth, quadHeight
+                        );
+                        
+                        // Convert to blob
+                        const blob = await new Promise((resolve, reject) => {
+                            quadCanvas.toBlob(resolve, 'image/jpeg', 0.9);
+                            setTimeout(() => reject(new Error('Quadrant capture timeout')), 5000);
+                        });
+                        
+                        if (!blob) {
+                            throw new Error(`Failed to create blob for quadrant ${quad.name}`);
+                        }
+                        
+                        // Create filename with quadrant identifier
+                        const filename = `quad-${quad.name}-${timestamp}.jpg`;
+                        
+                        // Upload each quadrant
+                        const uploadPromise = this.uploadQuadPhoto(blob, filename, quad.name);
+                        uploadPromises.push(uploadPromise);
+                        
+                        // Update progress
+                        const progressPercent = ((index + 1) / 4) * 100;
+                        document.getElementById('progressFill').style.width = `${progressPercent}%`;
+                        document.getElementById('currentPhoto').textContent = index + 1;
+                        
+                        console.log(`✅ Quadrant ${quad.name} prepared for upload (${(blob.size / 1024).toFixed(1)}KB)`);
+                    }
+                    
+                    // Wait for all uploads to complete
+                    const results = await Promise.all(uploadPromises);
+                    
+                    // Check if all uploads succeeded
+                    const allSuccessful = results.every(result => result.success);
+                    
+                    if (allSuccessful) {
+                        console.log('✅ All quad-split photos uploaded successfully!');
+                        progressText.textContent = '✅ Quad Split Complete!';
+                        progressText.style.color = '#10b981';
+                        
+                        // Show last captured quadrant as preview
+                        if (results.length > 0 && results[0].dataUrl) {
+                            this.updatePhotoPreview(results[0].dataUrl);
+                        }
+                    } else {
+                        throw new Error('Some quadrant uploads failed');
+                    }
+                    
+                } catch (error) {
+                    console.error('❌ Quad-split capture failed:', error);
+                    progressText.textContent = '❌ Capture Failed';
+                    progressText.style.color = '#ef4444';
+                } finally {
+                    this.disableControlsDuringCapture(false);
+                    
+                    // Hide progress indicator after delay
+                    setTimeout(() => {
+                        this.multiPhotoProgress.classList.add('hidden');
+                        const progressText = this.multiPhotoProgress.querySelector('.progress-text');
+                        progressText.textContent = 'Multi-Photo Mode';
+                        progressText.style.color = '#4ade80';
+                    }, 2000);
+                }
+            }
+
+            async uploadQuadPhoto(blob, filename, quadrantName) {
+                try {
+                    const formData = new FormData();
+                    formData.append('file', blob, filename);
+                    formData.append('source', 'camera');
+                    formData.append('quadrant', quadrantName);
+                    
+                    // Get CSRF token
+                    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+                    if (csrfToken) {
+                        formData.append('csrf_token', csrfToken);
+                    }
+
+                    const uploadResponse = await fetch('/camera/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (uploadResponse.ok) {
+                        const result = await uploadResponse.json();
+                        console.log(`✅ Quadrant ${quadrantName} uploaded successfully`);
+                        return { 
+                            success: true, 
+                            filename: filename, 
+                            quadrant: quadrantName,
+                            dataUrl: URL.createObjectURL(blob)
+                        };
+                    } else {
+                        const errorData = await uploadResponse.json();
+                        console.error(`❌ Upload failed for ${quadrantName}:`, errorData.error || 'Unknown error');
+                        return { success: false, quadrant: quadrantName };
+                    }
+                } catch (error) {
+                    console.error(`❌ Upload failed for ${quadrantName}:`, error.message);
+                    return { success: false, quadrant: quadrantName };
+                }
+            }
+
+            triggerFlash() {
+                // Trigger visual flash effect
+                if (this.flashEffect) {
+                    this.flashEffect.classList.add('active');
+                    setTimeout(() => {
+                        this.flashEffect.classList.remove('active');
+                    }, 300);
+                }
+            }
+
+            updatePhotoPreview(dataUrl) {
+                // Update the photo preview with the captured image
+                if (this.previewImage && this.photoPreview) {
+                    this.previewImage.src = dataUrl;
+                    this.photoPreview.classList.add('visible');
+                    
+                    // Store the photo for later access
+                    this.photos.push({ dataUrl: dataUrl, timestamp: new Date() });
+                }
+            }
+
+            initializeModeSelector() {
+                // Initialize mode selector to be hidden by default
+                // It will be shown only when multi-photo mode is enabled
+                console.log('🔧 Initializing mode selector...');
             }
 
             async startBurstCapture() {
